@@ -18,6 +18,10 @@
   let future = [];
   let anim = { t: 0, walls: null };
   let show = { grid: true, snap: true };
+  const pointers = new Map();
+  let pinch = null;
+  let suppressTap = false;
+  let longPressTimer = null;
 
   function emptyState(w, h, budget) {
     const cols = cellsFromFeet(w);
@@ -222,13 +226,28 @@
     document.getElementById("missionName").value = state.name;
   }
 
+  function isMobileLayout() {
+    return window.matchMedia("(max-width: 1200px)").matches;
+  }
+  function isCoarse() {
+    return window.matchMedia("(pointer: coarse)").matches || isMobileLayout();
+  }
+  function edgeSlop() { return isCoarse() ? 0.38 : 0.22; }
+  function openDrawer(side) {
+    closeDrawers();
+    document.body.classList.add("drawer-open", "drawer-" + side);
+  }
+  function closeDrawers() {
+    document.body.classList.remove("drawer-open", "drawer-left", "drawer-right");
+  }
+
   function fitCamera() {
     const rect = canvas.getBoundingClientRect();
-    const pad = 80;
+    const pad = isMobileLayout() ? 36 : 80;
     const g = gridOffset();
     const zx = (rect.width - pad * 2) / Math.max(1, g.spaceC);
     const zy = (rect.height - pad * 2) / Math.max(1, g.spaceR);
-    cam.zoom = clamp(Math.min(zx, zy), 22, 96);
+    cam.zoom = clamp(Math.min(zx, zy), 18, 96);
     cam.x = (rect.width - g.spaceC * cam.zoom) / 2;
     cam.y = (rect.height - g.spaceR * cam.zoom) / 2;
   }
@@ -264,13 +283,14 @@
   }
 
   function entityAt(wx, wy) {
-    let best = null, bestD = 0.5;
+    const extra = isCoarse() ? 0.38 : 0.22;
+    let best = null, bestD = isCoarse() ? 0.85 : 0.5;
     for (let i = state.entities.length - 1; i >= 0; i--) {
       const e = state.entities[i];
       const r = (ENTITY_META[e.type] || {}).r || 0.22;
       const dx = e.x - wx, dy = e.y - wy;
       const d = Math.hypot(dx, dy);
-      if (d < r + 0.22 && d < bestD) { best = e; bestD = d; }
+      if (d < r + extra && d < bestD) { best = e; bestD = d; }
     }
     return best;
   }
@@ -386,7 +406,7 @@
     const e = state.entities.find((x) => x.id === selected.id);
     if (!e || !canRotateType(e.type)) return null;
     const h = rotateHandlePos(e);
-    if (Math.hypot(wx - h.x, wy - h.y) < 0.18) return e;
+    if (Math.hypot(wx - h.x, wy - h.y) < (isCoarse() ? 0.34 : 0.18)) return e;
     return null;
   }
 
@@ -448,14 +468,13 @@
     highlightHotbar();
   }
 
-  function renderInspector() {
-    const el = document.getElementById("inspector");
+  function paintInspector(el, idPrefix) {
+    const pfx = idPrefix || "";
     if (!selected) {
       el.innerHTML = `<p class="muted">Drag walls, drums, and targets. Gold knob rotates people and stands. Hanging targets stick to a wall face.</p>`;
       return;
     }
     if (selected.kind === "wall") {
-      const p = edgeEndpoints(selected.key);
       const orient = parseEdge(selected.key).kind === "h" ? "East–West" : "North–South";
       el.innerHTML = `
         <div class="inspector-title"><span class="swatch" style="background:#c4a06a"></span>Range wall</div>
@@ -463,10 +482,10 @@
         <ul class="stats">
           <li><span>Orientation</span><span>${orient}</span></li>
         </ul>
-        <button class="btn block" id="inspDoor">Make entryway</button>
-        <button class="btn danger block" id="inspRemove">Remove wall</button>`;
-      el.querySelector("#inspDoor").onclick = () => { pushHist(); setOpening(selected.key, true); selected = { kind: "entry", key: selected.key }; syncHud(); };
-      el.querySelector("#inspRemove").onclick = () => { pushHist(); setWall(selected.key, false); selected = null; syncHud(); };
+        <button class="btn block" id="${pfx}inspDoor">Make entryway</button>
+        <button class="btn danger block" id="${pfx}inspRemove">Remove wall</button>`;
+      el.querySelector(`#${pfx}inspDoor`).onclick = () => { pushHist(); setOpening(selected.key, true); selected = { kind: "entry", key: selected.key }; syncHud(); };
+      el.querySelector(`#${pfx}inspRemove`).onclick = () => { pushHist(); setWall(selected.key, false); selected = null; syncHud(); };
       return;
     }
     if (selected.kind === "entry") {
@@ -479,14 +498,14 @@
           <li><span>Orientation</span><span>${orient}</span></li>
           <li><span>Main entry</span><span>${isMain ? "Yes" : "No"}</span></li>
         </ul>
-        <button class="btn block" id="inspMain">${isMain ? "Already main entry" : "Set as main entry"}</button>
-        <button class="btn danger block" id="inspRemove">Close with a wall</button>`;
-      el.querySelector("#inspMain").onclick = () => {
+        <button class="btn block" id="${pfx}inspMain">${isMain ? "Already main entry" : "Set as main entry"}</button>
+        <button class="btn danger block" id="${pfx}inspRemove">Close with a wall</button>`;
+      el.querySelector(`#${pfx}inspMain`).onclick = () => {
         const e = parseEdge(selected.key);
         state.entry = { side: e.kind === "h" ? (e.y === 0 ? "N" : e.y === state.rows ? "S" : "N") : (e.x === 0 ? "W" : "E"), edges: [selected.key] };
         persist(); syncHud();
       };
-      el.querySelector("#inspRemove").onclick = () => { pushHist(); setOpening(selected.key, false); selected = { kind: "wall", key: selected.key }; syncHud(); };
+      el.querySelector(`#${pfx}inspRemove`).onclick = () => { pushHist(); setOpening(selected.key, false); selected = { kind: "wall", key: selected.key }; syncHud(); };
       return;
     }
     const e = state.entities.find((x) => x.id === selected.id);
@@ -496,17 +515,27 @@
       <div class="inspector-title"><span class="swatch" style="background:${meta.color}"></span>${meta.label}</div>
       <p class="muted">${canRotateType(e.type) ? "Drag the gold knob to face any direction." : e.type === "hanging" ? "Snaps to the side of a wall you drop it on." : "Drag to move. Stops against walls."}</p>
       <label>Facing (deg)
-        <input type="number" id="inspRot" step="1" value="${Math.round(e.rot || 0)}" />
+        <input type="number" id="${pfx}inspRot" step="1" value="${Math.round(e.rot || 0)}" />
       </label>
-      <label class="check"><input type="checkbox" id="inspLock" ${e.locked ? "checked" : ""} /> Lock in place (shuffle-safe)</label>
-      <button class="btn danger block" id="inspRemove">Remove</button>`;
-    el.querySelector("#inspRot").onchange = (ev) => { pushHist(); e.rot = +ev.target.value; persist(); };
-    el.querySelector("#inspLock").onchange = (ev) => { e.locked = ev.target.checked; persist(); };
-    el.querySelector("#inspRemove").onclick = () => {
+      <label class="check"><input type="checkbox" id="${pfx}inspLock" ${e.locked ? "checked" : ""} /> Lock in place (shuffle-safe)</label>
+      <button class="btn danger block" id="${pfx}inspRemove">Remove</button>`;
+    el.querySelector(`#${pfx}inspRot`).onchange = (ev) => { pushHist(); e.rot = +ev.target.value; persist(); };
+    el.querySelector(`#${pfx}inspLock`).onchange = (ev) => { e.locked = ev.target.checked; persist(); };
+    el.querySelector(`#${pfx}inspRemove`).onclick = () => {
       pushHist();
       state.entities = state.entities.filter((x) => x.id !== e.id);
       selected = null; syncHud(); persist();
     };
+  }
+
+  function renderInspector() {
+    const main = document.getElementById("inspector");
+    const mob = document.getElementById("mobileInspector");
+    if (main) paintInspector(main, "");
+    if (mob) {
+      mob.classList.toggle("hidden", !selected);
+      paintInspector(mob, "m");
+    }
   }
 
   function highlightHotbar() {
@@ -627,16 +656,76 @@
     syncHud();
   }
 
+  function pointerPt(ev) { return { x: ev.clientX, y: ev.clientY }; }
+  function pointerDist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+  function pointerMid(a, b) { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
+  function clearLongPress() {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+  }
+  function armLongPress(ev) {
+    clearLongPress();
+    if (!isCoarse() || pointers.size !== 1) return;
+    const w0 = worldFromEvent(ev);
+    if (tool !== "select" && tool !== "erase") {
+      const ent0 = entityAt(w0.x, w0.y);
+      const edge0 = nearestEdge(w0.x, w0.y);
+      if (!ent0 && edge0.dist >= edgeSlop()) return;
+    }
+    longPressTimer = setTimeout(() => {
+      longPressTimer = null;
+      if (pinch || (dragging && dragging.kind !== "maybePan")) return;
+      const ent = entityAt(w0.x, w0.y);
+      const edge = nearestEdge(w0.x, w0.y);
+      if (ent) {
+        pushHist();
+        state.entities = state.entities.filter((e) => e.id !== ent.id);
+        selected = null;
+      } else if (edge.dist < edgeSlop()) {
+        pushHist();
+        if (isOpening(edge.key)) setOpening(edge.key, false);
+        else setWall(edge.key, false);
+        selected = null;
+      } else return;
+      suppressTap = true;
+      dragging = null;
+      try { navigator.vibrate?.(15); } catch (_) { /* ignore */ }
+      syncHud();
+      persist();
+    }, 520);
+  }
+
   canvas.addEventListener("pointerdown", (ev) => {
     canvas.focus();
+    ev.preventDefault();
+    pointers.set(ev.pointerId, pointerPt(ev));
+    try { canvas.setPointerCapture(ev.pointerId); } catch (_) { /* ignore */ }
+
+    if (pointers.size >= 2) {
+      clearLongPress();
+      const pts = [...pointers.values()];
+      pinch = {
+        dist0: Math.max(1, pointerDist(pts[0], pts[1])),
+        mid0: pointerMid(pts[0], pts[1]),
+        zoom0: cam.zoom,
+        cx: cam.x,
+        cy: cam.y,
+      };
+      dragging = null;
+      panning = false;
+      panFrom = null;
+      paintMode = null;
+      suppressTap = true;
+      return;
+    }
+
     const w = worldFromEvent(ev);
     if (ev.button === 1 || spacePan || ev.altKey) {
       panning = true;
       panFrom = { x: ev.clientX, y: ev.clientY, cx: cam.x, cy: cam.y };
-      canvas.setPointerCapture(ev.pointerId);
       return;
     }
-    if (ev.button !== 0) return;
+    if (ev.button !== 0 && ev.pointerType !== "touch") return;
+    armLongPress(ev);
 
     const rotEnt = rotateHandleAt(w.x, w.y);
     if (rotEnt && tool !== "erase") {
@@ -669,7 +758,7 @@
     }
 
     const edge = nearestEdge(w.x, w.y);
-    const onEdge = edge.dist < 0.22;
+    const onEdge = edge.dist < edgeSlop();
 
     if (tool === "entry") {
       if (!onEdge) return;
@@ -692,20 +781,21 @@
         selected = { kind: "entry", key: edge.key };
         dragging = { kind: "entry", key: edge.key };
         pushHist();
-        canvas.setPointerCapture(ev.pointerId);
+        canvas.style.cursor = "grabbing";
       } else if (onEdge && state.walls[edge.key]) {
         selected = { kind: "wall", key: edge.key };
         dragging = { kind: "wall", key: edge.key };
         pushHist();
-        canvas.setPointerCapture(ev.pointerId);
         canvas.style.cursor = "grabbing";
-      } else selected = null;
+      } else {
+        dragging = { kind: "maybePan", x: ev.clientX, y: ev.clientY, cx: cam.x, cy: cam.y };
+      }
       syncHud();
       return;
     }
 
     if (tool === "wall" || tool === "erase") {
-      if (edge.dist > 0.28) return;
+      if (edge.dist > (isCoarse() ? 0.42 : 0.28)) return;
       pushHist();
       if (tool === "erase") {
         paintMode = "remove";
@@ -736,12 +826,39 @@
   });
 
   canvas.addEventListener("pointermove", (ev) => {
-    const w = worldFromEvent(ev);
+    if (pointers.has(ev.pointerId)) pointers.set(ev.pointerId, pointerPt(ev));
+    if (pinch && pointers.size >= 2) {
+      const pts = [...pointers.values()];
+      const dist = Math.max(1, pointerDist(pts[0], pts[1]));
+      const mid = pointerMid(pts[0], pts[1]);
+      const r = canvas.getBoundingClientRect();
+      const worldX = (pinch.mid0.x - r.left - pinch.cx) / pinch.zoom0;
+      const worldY = (pinch.mid0.y - r.top - pinch.cy) / pinch.zoom0;
+      cam.zoom = clamp(pinch.zoom0 * (dist / pinch.dist0), 18, 160);
+      cam.x = (mid.x - r.left) - worldX * cam.zoom;
+      cam.y = (mid.y - r.top) - worldY * cam.zoom;
+      return;
+    }
+    if (dragging && dragging.kind === "maybePan") {
+      const dx = ev.clientX - dragging.x;
+      const dy = ev.clientY - dragging.y;
+      if (Math.hypot(dx, dy) > 8) {
+        clearLongPress();
+        panning = true;
+        panFrom = { x: dragging.x, y: dragging.y, cx: dragging.cx, cy: dragging.cy };
+        dragging = { kind: "pan" };
+        canvas.style.cursor = "grabbing";
+      }
+      return;
+    }
     if (panning && panFrom) {
+      if (Math.hypot(ev.clientX - panFrom.x, ev.clientY - panFrom.y) > 8) clearLongPress();
       cam.x = panFrom.cx + (ev.clientX - panFrom.x);
       cam.y = panFrom.cy + (ev.clientY - panFrom.y);
       return;
     }
+    const w = worldFromEvent(ev);
+    if (dragging && Math.hypot(ev.movementX || 0, ev.movementY || 0) > 2) clearLongPress();
     if (dragging && dragging.kind === "rotate") {
       const e = state.entities.find((x) => x.id === dragging.id);
       if (e) {
@@ -798,7 +915,7 @@
     }
     if (dragging && dragging.kind === "paint") {
       const edge = nearestEdge(w.x, w.y);
-      if (edge.dist < 0.3) setWall(edge.key, paintMode === "add");
+      if (edge.dist < (isCoarse() ? 0.42 : 0.3)) setWall(edge.key, paintMode === "add");
       syncHud();
       hover = { kind: "edge", key: edge.key };
       return;
@@ -816,7 +933,7 @@
       return;
     }
     const edge = nearestEdge(w.x, w.y);
-    if (edge.dist < 0.22 && isOpening(edge.key) && !state.walls[edge.key]) {
+    if (edge.dist < edgeSlop() && isOpening(edge.key) && !state.walls[edge.key]) {
       hover = { kind: "entry", key: edge.key };
       canvas.style.cursor = "grab";
       return;
@@ -825,7 +942,7 @@
       hover = { kind: "edge", key: edge.key };
       canvas.style.cursor = "crosshair";
     } else if (tool === "select") {
-      if (edge.dist < 0.18 && state.walls[edge.key]) {
+      if (edge.dist < edgeSlop() && state.walls[edge.key]) {
         hover = { kind: "edge", key: edge.key };
         canvas.style.cursor = "grab";
       } else {
@@ -838,16 +955,25 @@
     }
   });
 
-  canvas.addEventListener("pointerup", () => {
+  function endPointer(ev) {
+    clearLongPress();
+    if (ev) pointers.delete(ev.pointerId);
+    if (pointers.size < 2) pinch = null;
+    if (pointers.size > 0) return;
+    if (dragging && dragging.kind === "maybePan" && !suppressTap) selected = null;
     dragging = null;
     panning = false;
     panFrom = null;
     paintMode = null;
+    suppressTap = false;
     persist();
     syncHud();
+  }
+  canvas.addEventListener("pointerup", endPointer);
+  canvas.addEventListener("pointercancel", endPointer);
+  canvas.addEventListener("pointerleave", (ev) => {
+    if (ev.pointerType !== "touch") hover = null;
   });
-
-  canvas.addEventListener("pointerleave", () => { hover = null; });
 
   canvas.addEventListener("wheel", (ev) => {
     ev.preventDefault();
@@ -884,6 +1010,7 @@
         closeSheet();
         return;
       }
+      if (document.body.classList.contains("drawer-open")) { closeDrawers(); return; }
       selected = null; tool = "select"; syncHud(); return;
     }
     if ((ev.key === "p" || ev.key === "P") && !ev.ctrlKey && !ev.metaKey) {
@@ -935,10 +1062,25 @@
   ["roomCount", "hangingCount", "standCount", "drumCount", "hostageCount", "threatCount", "instructorCount"]
     .forEach((id) => bindRange(id, id + "Val"));
 
-  document.getElementById("btnApplySpace").onclick = applySpace;
-  document.getElementById("btnGenerate").onclick = () => generate(true);
-  document.getElementById("btnRandom").onclick = () => generate(true);
-  document.getElementById("btnShuffle").onclick = shuffle;
+  document.getElementById("btnApplySpace").onclick = () => { applySpace(); closeDrawers(); };
+  document.getElementById("btnGenerate").onclick = () => { generate(true); closeDrawers(); };
+  document.getElementById("btnRandom").onclick = () => { generate(true); closeDrawers(); };
+  document.getElementById("btnShuffle").onclick = () => { shuffle(); closeDrawers(); };
+  document.getElementById("btnSetup").onclick = () => {
+    if (document.body.classList.contains("drawer-left")) closeDrawers();
+    else openDrawer("left");
+  };
+  document.getElementById("btnInspect").onclick = () => {
+    if (document.body.classList.contains("drawer-right")) closeDrawers();
+    else openDrawer("right");
+  };
+  document.getElementById("drawerBackdrop").onclick = closeDrawers;
+  document.querySelectorAll("[data-close-drawer]").forEach((b) => { b.onclick = closeDrawers; });
+  document.addEventListener("touchmove", (e) => {
+    if (e.target.closest(".rail, .overlay, .mobile-inspector, input, select, textarea, .top-actions, .hotbar")) return;
+    e.preventDefault();
+  }, { passive: false });
+  canvas.addEventListener("touchstart", (e) => { e.preventDefault(); }, { passive: false });
   document.getElementById("btnNew").onclick = () => {
     pushHist();
     const cfg = readConfig();
@@ -1089,6 +1231,16 @@
   });
 
   window.addEventListener("resize", () => { resize(); });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", () => { resize(); });
+  }
+  window.addEventListener("orientationchange", () => {
+    setTimeout(() => { resize(); fitCamera(); }, 250);
+  });
+  const hint = document.getElementById("stageHint");
+  if (hint && isCoarse()) {
+    hint.textContent = "Drag to move · empty drag pans · pinch zoom · long-press removes";
+  }
 
   buildHotbar();
   restore();

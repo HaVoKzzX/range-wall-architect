@@ -44,3 +44,5 @@ The live app is a full-screen copy of the planner (walls, generate, save/load, P
 - **Print / PDF** — one-page professional field sheet with the plan, walls required, target list, cover, personnel, and room schedule (`P`)
 
 Keyboard: `1–9` tools, `G` generate, `R` rotate, `Del` remove, scroll zoom, middle-drag or Space-drag pan, `Ctrl+Z` / `Ctrl+Y` undo/redo.
+
+On phones and tablets: **Setup** and **Sheet** open the side panels, the floor fills the screen, pinch to zoom, drag empty floor to pan, long-press to remove.

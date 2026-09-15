@@ -40,8 +40,10 @@ st.markdown(
         position: fixed !important;
         inset: 0 !important;
         width: 100vw !important;
+        width: 100dvw !important;
         height: 100vh !important;
-        min-height: 100vh !important;
+        height: 100dvh !important;
+        min-height: 100dvh !important;
         border: 0 !important;
         z-index: 999 !important;
       }
@@ -75,7 +77,9 @@ def build_html() -> str:
       frame.style.position = "fixed";
       frame.style.inset = "0";
       frame.style.width = "100vw";
-      frame.style.height = "100vh";
+      frame.style.height = (window.visualViewport && window.visualViewport.height)
+        ? (window.visualViewport.height + "px")
+        : "100dvh";
       frame.style.border = "0";
       frame.style.zIndex = "999";
     } catch (err) { /* cross-origin: parent CSS still sizes the iframe */ }
