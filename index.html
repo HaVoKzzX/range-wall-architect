@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="author" content="Centurion Invictus LLC" />
+  <meta name="copyright" content="© 2026 Centurion Invictus LLC" />
+  <title>Range Wall Architect — Centurion Invictus</title>
+  <link rel="icon" href="assets/centurion-logo.png" type="image/png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <a class="brand-logo-link" href="https://www.centurioninvictus.com" target="_blank" rel="noopener" title="Centurion Invictus">
+          <img class="brand-logo" id="brandLogo" src="assets/centurion-logo.png" alt="Centurion Invictus" />
+        </a>
+        <div>
+          <div class="brand-name">Range Wall Architect</div>
+          <div class="brand-sub">
+            Centurion Invictus ·
+            <a href="https://www.centurioninvictus.com" target="_blank" rel="noopener">www.centurioninvictus.com</a>
+          </div>
+        </div>
+      </div>
+      <div class="mission-chip" id="missionChip">
+        <span class="kicker">Layout name</span>
+        <input type="text" id="missionName" maxlength="48" spellcheck="false" value="UNASSIGNED" title="Click to rename this layout" />
+      </div>
+      <div class="top-actions">
+        <button class="btn ghost" id="btnNew" title="Clear floor (N)">New</button>
+        <button class="btn ghost" id="btnUndo" title="Undo (Ctrl+Z)">Undo</button>
+        <button class="btn ghost" id="btnRedo" title="Redo (Ctrl+Y)">Redo</button>
+        <button class="btn ghost" id="btnSave" title="Download JSON">Save</button>
+        <button class="btn ghost" id="btnLoad" title="Load JSON">Load</button>
+        <input type="file" id="fileLoad" accept="application/json,.json" hidden />
+        <button class="btn ghost" id="btnPng" title="Export PNG">PNG</button>
+        <button class="btn ghost" id="btnPrint" title="Print or save a one-page PDF (P)">Print / PDF</button>
+        <button class="btn primary" id="btnRandom" title="Build a random shoot house (G)">Generate</button>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="rail rail-left">
+        <section class="panel">
+          <h2>Your Space</h2>
+          <div class="row-2">
+            <label>Width (ft)
+              <input type="number" id="spaceW" min="8" max="200" step="1" value="30" />
+            </label>
+            <label>Depth (ft)
+              <input type="number" id="spaceH" min="8" max="200" step="1" value="40" />
+            </label>
+          </div>
+          <p class="hint" id="gridHint">The building outline is your space. The 54¼″ panel grid sits inside it.</p>
+          <label>Grid left ↔ right
+            <input type="range" id="gridShiftX" min="0" max="100" value="50" />
+            <span class="range-val" id="gridShiftXVal">C</span>
+          </label>
+          <label>Grid top ↕ bottom
+            <input type="range" id="gridShiftY" min="0" max="100" value="50" />
+            <span class="range-val" id="gridShiftYVal">C</span>
+          </label>
+          <button class="btn block" id="btnCenterGrid">Center grid in space</button>
+          <button class="btn block" id="btnApplySpace">Apply space</button>
+        </section>
+
+        <section class="panel">
+          <h2>Random Setup</h2>
+          <button class="btn primary block lg" id="btnGenerate">Build random shoot house</button>
+          <button class="btn block" id="btnShuffle">Shuffle props only</button>
+          <label>About how many walls
+            <input type="number" id="wallCount" min="1" max="400" step="1" value="36" />
+          </label>
+          <label>Rooms
+            <input type="range" id="roomCount" min="1" max="12" value="4" />
+            <span class="range-val" id="roomCountVal">4</span>
+          </label>
+          <label>Opening style
+            <select id="openingStyle">
+              <option value="mixed" selected>Mixed (corner + center)</option>
+              <option value="corner">Corner-fed</option>
+              <option value="center">Center-fed</option>
+              <option value="random">Random each door</option>
+            </select>
+          </label>
+          <label>Entry side
+            <select id="entrySide">
+              <option value="auto" selected>Auto</option>
+              <option value="S">South</option>
+              <option value="N">North</option>
+              <option value="W">West</option>
+              <option value="E">East</option>
+            </select>
+          </label>
+          <label>Door width
+            <select id="doorWidth">
+              <option value="1" selected>1 panel (54¼″)</option>
+              <option value="2">2 panels (108½″)</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="perimeter" checked /> Build perimeter walls</label>
+          <label class="check"><input type="checkbox" id="coverWalls" checked /> Extra interior cover walls</label>
+          <label class="check"><input type="checkbox" id="hostageScenario" checked /> At least one holding pair</label>
+
+          <div class="divider">Targets &amp; props</div>
+          <label>Wall-hanging targets
+            <input type="range" id="hangingCount" min="0" max="24" value="6" />
+            <span class="range-val" id="hangingCountVal">6</span>
+          </label>
+          <label>Target stands
+            <input type="range" id="standCount" min="0" max="24" value="4" />
+            <span class="range-val" id="standCountVal">4</span>
+          </label>
+          <label>55-gal plastic drums
+            <input type="range" id="drumCount" min="0" max="16" value="4" />
+            <span class="range-val" id="drumCountVal">4</span>
+          </label>
+          <label>Non-combatants
+            <input type="range" id="hostageCount" min="0" max="8" value="1" />
+            <span class="range-val" id="hostageCountVal">1</span>
+          </label>
+          <label>Enemy combatants
+            <input type="range" id="threatCount" min="0" max="8" value="1" />
+            <span class="range-val" id="threatCountVal">1</span>
+          </label>
+          <label>Instructors
+            <input type="range" id="instructorCount" min="0" max="6" value="1" />
+            <span class="range-val" id="instructorCountVal">1</span>
+          </label>
+          <label class="check"><input type="checkbox" id="optTargets" checked /> Optimal target locations</label>
+          <label class="check"><input type="checkbox" id="optInstructor" checked /> Optimal instructor location</label>
+        </section>
+
+        <section class="panel">
+          <h2>Presets</h2>
+          <div class="preset-grid">
+            <button class="preset" data-preset="sample" title="3-wall sample">3 · sample</button>
+            <button class="preset" data-preset="25">25 · CQB</button>
+            <button class="preset" data-preset="36" title="Your default">36 · 30×40</button>
+            <button class="preset" data-preset="42">42 · multi</button>
+            <button class="preset" data-preset="63">63 · complex</button>
+            <button class="preset" data-preset="84">84 · squad</button>
+          </div>
+          <p class="hint">Matches American Range Walls example scales. Any quantity works.</p>
+        </section>
+        <p class="legal">© 2026 Centurion Invictus LLC. All rights reserved.</p>
+      </aside>
+
+      <section class="stage-wrap">
+        <div class="stage-hud">
+          <div class="ammo" id="wallAmmo" title="Wall panels placed">
+            <span class="ammo-label">WALLS</span>
+            <span class="ammo-num" id="wallsUsed">0</span>
+          </div>
+          <div class="hud-pill" id="sizePill">30′ × 40′</div>
+          <div class="hud-toggles">
+            <label class="check tight"><input type="checkbox" id="snapGrid" checked /> Grid lock</label>
+            <label class="check tight"><input type="checkbox" id="showGrid" checked /> Grid</label>
+          </div>
+        </div>
+        <canvas id="floor" tabindex="0"></canvas>
+        <div class="hotbar" id="hotbar"></div>
+        <p class="stage-hint" id="stageHint">Drag walls, drums, and targets · gold knob rotates · hanging targets snap to a wall face · 3 entry</p>
+      </section>
+
+      <aside class="rail rail-right">
+        <section class="panel">
+          <h2>Selected</h2>
+          <div id="inspector">
+            <p class="muted">Click a drum, target, or person and drag it. Use tool 2 to paint walls.</p>
+          </div>
+        </section>
+        <section class="panel">
+          <h2>Build sheet</h2>
+          <ul class="stats" id="statsList"></ul>
+        </section>
+        <section class="panel keys">
+          <h2>Controls</h2>
+          <ul class="keylist">
+            <li><kbd>1–0</kbd> tools</li>
+            <li><kbd>3</kbd> punch / move entry</li>
+            <li><kbd>Click</kbd> select / drag</li>
+            <li><kbd>Drag</kbd> move props or slide doors</li>
+            <li><kbd>R</kbd> rotate facing</li>
+            <li><kbd>Del</kbd> remove</li>
+            <li><kbd>G</kbd> generate layout</li>
+            <li><kbd>P</kbd> print / PDF sheet</li>
+            <li><kbd>Space</kbd> + drag pan</li>
+            <li><kbd>Scroll</kbd> zoom</li>
+            <li><kbd>Ctrl+Z / Y</kbd> undo / redo</li>
+            <li><kbd>Esc</kbd> deselect</li>
+          </ul>
+        </section>
+      </aside>
+    </div>
+  </div>
+
+  <div id="briefing" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="brief-card">
+      <div class="brief-kicker">Centurion Invictus · Mission briefing</div>
+      <h1 id="briefTitle">OPERATION</h1>
+      <p id="briefBody"></p>
+      <button class="btn primary" id="briefDismiss">Hit the floor</button>
+      <p class="legal">© 2026 Centurion Invictus LLC. All rights reserved.</p>
+    </div>
+  </div>
+
+  <div id="sheetOverlay" class="overlay sheet-overlay hidden" role="dialog" aria-modal="true">
+    <div class="sheet-frame">
+      <div class="sheet-toolbar">
+        <div>
+          <div class="brief-kicker">Final layout</div>
+          <strong>One-page field sheet — print or save PDF</strong>
+        </div>
+        <div class="sheet-toolbar-actions">
+          <button class="btn primary" id="sheetPdf">Download PDF</button>
+          <button class="btn" id="sheetPrint">Print</button>
+          <button class="btn ghost" id="sheetClose">Close</button>
+        </div>
+      </div>
+      <div class="sheet-paper" id="printStage">
+        <canvas id="sheetCanvas"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/generator.js"></script>
+  <script src="js/draw.js"></script>
+  <script src="js/sheet.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
